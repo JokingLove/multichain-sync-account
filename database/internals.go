@@ -56,7 +56,7 @@ type InternalsDB interface {
 
 	StoreInternal(string, *Internals) error
 	UpdateInternalByTxHash(requestId string, txHash common.Hash, signedTx string, status TxStatus) error
-	UpdateInternalById(requestId string, txHash common.Hash, signedTx string, status TxStatus) error
+	UpdateInternalById(requestId string, guid string, signedTx string, status TxStatus) error
 	UpdateInternalStatusByTxHash(requestId string, status TxStatus, internalsList []*Internals) error
 	UpdateInternalListByHash(requestId string, internalsList []*Internals) error
 	UpdateInternalListById(requestId string, internalsList []*Internals) error
@@ -154,7 +154,7 @@ func (db internalsDB) UpdateInternalByTxHash(requestId string, txHash common.Has
 	return nil
 }
 
-func (db internalsDB) UpdateInternalById(requestId string, txHash common.Hash, signedTx string, status TxStatus) error {
+func (db internalsDB) UpdateInternalById(requestId string, guid string, signedTx string, status TxStatus) error {
 	updates := map[string]interface{}{
 		"status": status,
 	}
@@ -164,7 +164,7 @@ func (db internalsDB) UpdateInternalById(requestId string, txHash common.Hash, s
 	}
 
 	result := db.gorm.Table(TableInternalsPrefix+requestId).
-		Where("hash = ?", txHash.String()).
+		Where("guid  = ?", guid).
 		Updates(updates)
 	if result.Error != nil {
 		return result.Error

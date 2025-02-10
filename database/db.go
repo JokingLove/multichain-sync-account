@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"path/filepath"
-
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/pkg/errors"
@@ -29,8 +28,8 @@ type DB struct {
 	Tokens      TokensDB
 	Business    BusinessDB
 	Trasactions TransactionsDB
-	//Internals InternalsDB
-	Withdraws WithdrawDB
+	Internals   InternalsDB
+	Withdraws   WithdrawDB
 }
 
 func NewDB(ctx context.Context, dbConfig config.DBConfig) (*DB, error) {
@@ -86,7 +85,8 @@ func NewDB(ctx context.Context, dbConfig config.DBConfig) (*DB, error) {
 		Tokens:      NewTokensDB(gormDbBox),
 		Business:    NewBusinessDB(gormDbBox),
 		Withdraws:   NewWithdrawDB(gormDbBox),
-		// TODO
+		Trasactions: NewTransactionsDB(gormDbBox),
+		Internals:   NewInternalsDB(gormDbBox),
 	}
 
 	return db, nil

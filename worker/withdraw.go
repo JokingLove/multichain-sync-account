@@ -25,7 +25,7 @@ type Withdraw struct {
 	ticker         *time.Ticker
 }
 
-func NewWithdraw(cfg *config.Config, rpcClient *rpcclient.WalletChainAccountClient, db *database.DB, shutdown context.CancelCauseFunc) (*Withdraw, error) {
+func NewWithdraw(cfg *config.Config, db *database.DB, rpcClient *rpcclient.WalletChainAccountClient, shutdown context.CancelCauseFunc) (*Withdraw, error) {
 	resCtx, resCancel := context.WithCancel(context.Background())
 	return &Withdraw{
 		rpcClient:      rpcClient,

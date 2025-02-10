@@ -4,19 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/JokingLove/multichain-sync-account/common/retry"
-	"github.com/JokingLove/multichain-sync-account/rpcclient/chain-account/account"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/google/uuid"
 	"math/big"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/google/uuid"
 
+	"github.com/JokingLove/multichain-sync-account/common/retry"
 	"github.com/JokingLove/multichain-sync-account/common/tasks"
 	"github.com/JokingLove/multichain-sync-account/config"
 	"github.com/JokingLove/multichain-sync-account/database"
 	"github.com/JokingLove/multichain-sync-account/rpcclient"
+	"github.com/JokingLove/multichain-sync-account/rpcclient/chain-account/account"
 )
 
 type Deposit struct {
@@ -113,8 +113,8 @@ func (d *Deposit) Start() error {
 	return nil
 }
 
-func (deposit *Deposit) handleBatch(batch map[string]*TransactionChannel) error {
-	businessList, err := deposit.database.Business.QueryBusinessList()
+func (d *Deposit) handleBatch(batch map[string]*TransactionChannel) error {
+	businessList, err := d.database.Business.QueryBusinessList()
 	if err != nil {
 		log.Error("query business list fail", "err", err)
 		return err
@@ -144,8 +144,8 @@ func (deposit *Deposit) handleBatch(batch map[string]*TransactionChannel) error 
 			"chainLatestBlock", batch[business.BusinessUid].BlockHeight,
 			"txn", len(batch[business.BusinessUid].Transactions))
 		for _, tx := range batch[business.BusinessUid].Transactions {
-			log.Info("Request transaction from chain account", "txhash", tx.Hash, "fromAddress", tx.FromAddress)
-			txItem, err := deposit.rpcClient.GetTransactionByHash(tx.Hash)
+			log.Info("Request transaction from chain account", "txHash", tx.Hash, "fromAddress", tx.FromAddress)
+			txItem, err := d.rpcClient.GetTransactionByHash(tx.Hash)
 			if err != nil {
 				log.Info("get transaction by hash fail", "err", err)
 				return err
@@ -167,7 +167,7 @@ func (deposit *Deposit) handleBatch(batch map[string]*TransactionChannel) error 
 			})
 
 			log.Info("get transaction success", "txHash", txItem.Hash)
-			transactionFlow, err := deposit.BuildTransaction(tx, txItem)
+			transactionFlow, err := d.BuildTransaction(tx, txItem)
 			if err != nil {
 				log.Info("handle transaction flow fail", "err", err)
 				return err
@@ -177,15 +177,15 @@ func (deposit *Deposit) handleBatch(batch map[string]*TransactionChannel) error 
 
 			switch tx.TxType {
 			case database.TxTypeDeposit:
-				depositItem, _ := deposit.HandleDeposit(tx, txItem)
+				depositItem, _ := d.HandleDeposit(tx, txItem)
 				depositList = append(depositList, depositItem)
 				break
 			case database.TxTypeWithdraw:
-				withdrawItem, _ := deposit.HandleWithdraw(tx, txItem)
+				withdrawItem, _ := d.HandleWithdraw(tx, txItem)
 				withdrawList = append(withdrawList, withdrawItem)
 				break
 			case database.TxTypeCollection, database.TxTypeHot2Cold, database.TxTypeCold2Hot:
-				internalItem, _ := deposit.HandleInternalTx(tx, txItem)
+				internalItem, _ := d.HandleInternalTx(tx, txItem)
 				internals = append(internals, internalItem)
 				break
 			default:
@@ -194,8 +194,8 @@ func (deposit *Deposit) handleBatch(batch map[string]*TransactionChannel) error 
 		}
 
 		retryStrategy := &retry.ExponentialStrategy{Min: 1000, Max: 20_000, MaxJitter: 250}
-		if _, err := retry.Do[interface{}](deposit.resourceCtx, 10, retryStrategy, func() (interface{}, error) {
-			if err := deposit.database.Transaction(func(tx *database.DB) error {
+		if _, err := retry.Do[interface{}](d.resourceCtx, 10, retryStrategy, func() (interface{}, error) {
+			if err := d.database.Transaction(func(tx *database.DB) error {
 				if len(depositList) > 0 {
 					log.Info("Store deposit transaction", "totalTx", len(depositList))
 					if err := tx.Deposits.StoreDeposits(business.BusinessUid, depositList); err != nil {
@@ -204,7 +204,7 @@ func (deposit *Deposit) handleBatch(batch map[string]*TransactionChannel) error 
 					}
 
 					// update deposit confirms
-					if err := tx.Deposits.UpdateDepositsConfirms(business.BusinessUid, batch[business.BusinessUid].BlockHeight, uint64(deposit.confirms)); err != nil {
+					if err := tx.Deposits.UpdateDepositsConfirms(business.BusinessUid, batch[business.BusinessUid].BlockHeight, uint64(d.confirms)); err != nil {
 						log.Error("handle confirms fail", "err", err)
 						return err
 					}
@@ -226,10 +226,13 @@ func (deposit *Deposit) handleBatch(batch map[string]*TransactionChannel) error 
 						}
 					}
 
-					// TODO handle collection hot2cold cold2hot
-					//if len(internals) > 0 {
-					//	if err := tx.I
-					//}
+					//  handle collection hot 2 cold and cold 2 hot
+					if len(internals) > 0 {
+						if err := tx.Internals.UpdateInternalStatusByTxHash(business.BusinessUid, database.TxStatusWalletDone, internals); err != nil {
+							log.Error("handle internals fail", "err", err)
+							return err
+						}
+					}
 
 					// handle transaction flow
 					if len(transactionFlowList) > 0 {
@@ -253,7 +256,7 @@ func (deposit *Deposit) handleBatch(batch map[string]*TransactionChannel) error 
 	return nil
 }
 
-func (deposit *Deposit) BuildTransaction(tx *Transaction, txMsg *account.TxMessage) (*database.Transactions, error) {
+func (d *Deposit) BuildTransaction(tx *Transaction, txMsg *account.TxMessage) (*database.Transactions, error) {
 	txFee, _ := new(big.Int).SetString(txMsg.Fee, 10)
 	txAmount, _ := new(big.Int).SetString(txMsg.Values[0].Value, 10)
 	transactionTx := &database.Transactions{
@@ -275,7 +278,7 @@ func (deposit *Deposit) BuildTransaction(tx *Transaction, txMsg *account.TxMessa
 	return transactionTx, nil
 }
 
-func (deposit *Deposit) HandleWithdraw(tx *Transaction, txMsg *account.TxMessage) (*database.Withdraws, error) {
+func (d *Deposit) HandleWithdraw(tx *Transaction, txMsg *account.TxMessage) (*database.Withdraws, error) {
 	txAmount, _ := new(big.Int).SetString(txMsg.Values[0].Value, 10)
 	withdrawTx := &database.Withdraws{
 		GUID:         uuid.New(),
@@ -295,7 +298,7 @@ func (deposit *Deposit) HandleWithdraw(tx *Transaction, txMsg *account.TxMessage
 	return withdrawTx, nil
 }
 
-func (deposit *Deposit) HandleDeposit(tx *Transaction, txMsg *account.TxMessage) (*database.Deposits, error) {
+func (d *Deposit) HandleDeposit(tx *Transaction, txMsg *account.TxMessage) (*database.Deposits, error) {
 	txAmount, _ := new(big.Int).SetString(txMsg.Values[0].Value, 10)
 	depositTx := &database.Deposits{
 		GUID:         uuid.New(),
@@ -315,7 +318,7 @@ func (deposit *Deposit) HandleDeposit(tx *Transaction, txMsg *account.TxMessage)
 	return depositTx, nil
 }
 
-func (deposit *Deposit) HandleInternalTx(tx *Transaction, txMsg *account.TxMessage) (*database.Internals, error) {
+func (d *Deposit) HandleInternalTx(tx *Transaction, txMsg *account.TxMessage) (*database.Internals, error) {
 	txAmount, _ := new(big.Int).SetString(txMsg.Values[0].Value, 10)
 	internalsTx := &database.Internals{
 		GUID:         uuid.New(),

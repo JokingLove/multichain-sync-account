@@ -79,7 +79,7 @@ func CancelOnInterrupt(ctx context.Context) context.Context {
 	inner, cancel := context.WithCancel(context.Background())
 
 	blockOnInterrupt := BlockerFromContext(ctx)
-	if blockOnInterrupt != nil {
+	if blockOnInterrupt == nil {
 		blockOnInterrupt = func(ctx context.Context) {
 			BlockOnInterruptContext(ctx) // default signals
 		}

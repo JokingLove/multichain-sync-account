@@ -254,7 +254,39 @@ func (bws *BusinessMiddleWireServices) BuildSignedTransaction(ctx context.Contex
 		maxFeePerGas = tx.MaxFeePerGas
 		maxPriorityFeePerGas = tx.MaxPriorityFeeGas
 	case database.TxTypeWithdraw:
+		tx, err := bws.db.Withdraws.QueryWithdrawsById(request.RequestId, request.TransactionId)
+		if err != nil {
+			return nil, fmt.Errorf("query withdraw fail: %w", err)
+		}
+		if tx == nil {
+			response.Msg = "Withdraw transaction not found"
+			return response, nil
+		}
+		fromAddress = tx.FromAddress.String()
+		toAddress = tx.ToAddress.String()
+		amount = tx.Amount.String()
+		tokenAddress = tx.TokenAddress.String()
+		gasLimit = tx.GasLimit
+		maxFeePerGas = tx.MaxFeePerGas
+		maxPriorityFeePerGas = tx.MaxPriorityFeePerGas
+
 	case database.TxTypeCollection, database.TxTypeHot2Cold, database.TxTypeCold2Hot:
+		tx, err := bws.db.Internals.QueryInternalById(request.RequestId, request.TransactionId)
+		if err != nil {
+			return nil, fmt.Errorf("query internal fail: %w", err)
+		}
+		if tx == nil {
+			response.Msg = "Internal transaction not found"
+			return response, nil
+		}
+		fromAddress = tx.FromAddress.String()
+		toAddress = tx.ToAddress.String()
+		amount = tx.Amount.String()
+		tokenAddress = tx.TokenAddress.String()
+		gasLimit = tx.GasLimit
+		maxFeePerGas = tx.MaxFeePerGas
+		maxPriorityFeePerGas = tx.MaxPriorityFeePerGas
+
 	default:
 		response.Msg = "unsupported transaction type"
 		response.SignTx = "0x00"
@@ -303,7 +335,9 @@ func (bws *BusinessMiddleWireServices) BuildSignedTransaction(ctx context.Contex
 	case database.TxTypeDeposit:
 		updateErr = bws.db.Deposits.UpdateDepositById(request.RequestId, request.TransactionId, returnTx.SignedTx, database.TxStatusSigned)
 	case database.TxTypeWithdraw:
+		updateErr = bws.db.Withdraws.UpdateWithdrawById(request.RequestId, request.TransactionId, returnTx.SignedTx, database.TxStatusSigned)
 	case database.TxTypeCollection, database.TxTypeHot2Cold, database.TxTypeCold2Hot:
+		updateErr = bws.db.Internals.UpdateInternalById(request.RequestId, request.TransactionId, returnTx.SignedTx, database.TxStatusSigned)
 	default:
 		response.Msg = "unsupported transaction type"
 		response.SignTx = "0x00"
@@ -500,7 +534,27 @@ func (bws *BusinessMiddleWireServices) storeWithdraw(
 	transactionType database.TransactionType,
 ) error {
 
-	withdraw := &database.With
+	withdraw := &database.Withdraws{
+		GUID:                 transactionId,
+		Timestamp:            uint64(time.Now().Unix()),
+		Status:               database.TxStatusCreateUnsigned,
+		BlockHash:            common.Hash{},
+		BlockNumber:          big.NewInt(1),
+		TxHash:               common.Hash{},
+		TxType:               transactionType,
+		FromAddress:          common.HexToAddress(request.From),
+		ToAddress:            common.HexToAddress(request.To),
+		Amount:               amountBig,
+		GasLimit:             gasLimit,
+		MaxFeePerGas:         feeInfo.MaxPriorityFee.String(),
+		MaxPriorityFeePerGas: feeInfo.MultipliedTip.String(),
+		TokenType:            determineTokenType(request.ContractAddress),
+		TokenAddress:         common.HexToAddress(request.ContractAddress),
+		TokenId:              request.TokenId,
+		TokenMeta:            request.TokenMeta,
+		TxSignHex:            "",
+	}
+	return bws.db.Withdraws.StoreWithdraw(request.RequestId, withdraw)
 }
 
 func determineTokenType(contractAddress string) database.TokenType {

@@ -3,21 +3,22 @@ package main
 import (
 	"context"
 	"fmt"
-	multichain_transaction_syncs "github.com/JokingLove/multichain-sync-account"
-	"github.com/JokingLove/multichain-sync-account/database"
-	"github.com/JokingLove/multichain-sync-account/rpcclient"
-	"github.com/JokingLove/multichain-sync-account/rpcclient/chain-account/account"
-	"github.com/JokingLove/multichain-sync-account/services"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/urfave/cli/v2"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
+	multichain_transaction_syncs "github.com/JokingLove/multichain-sync-account"
 	"github.com/JokingLove/multichain-sync-account/common/cliapp"
+	"github.com/JokingLove/multichain-sync-account/common/opio"
 	"github.com/JokingLove/multichain-sync-account/config"
-
+	"github.com/JokingLove/multichain-sync-account/database"
 	flags2 "github.com/JokingLove/multichain-sync-account/flags"
+	"github.com/JokingLove/multichain-sync-account/notifier"
+	"github.com/JokingLove/multichain-sync-account/rpcclient"
+	"github.com/JokingLove/multichain-sync-account/rpcclient/chain-account/account"
+	"github.com/JokingLove/multichain-sync-account/services"
 )
 
 func NewCli(GitCommit string, GitData string) *cli.App {
@@ -39,8 +40,66 @@ func NewCli(GitCommit string, GitData string) *cli.App {
 				Description: "Run rpc scanner wallet chain node",
 				Action:      cliapp.LifecycleCmd(runMultichainSync),
 			},
+			{
+				Name:        "migrate",
+				Flags:       flags,
+				Description: "Run database migration",
+				Action:      runMigrations,
+			},
+			{
+				Name:        "notify",
+				Flags:       flags,
+				Description: "Run notify service",
+				Action:      cliapp.LifecycleCmd(runNotify),
+			},
+			{
+				Name:        "version",
+				Description: "Show project version",
+				Action: func(ctx *cli.Context) error {
+					cli.ShowVersion(ctx)
+					return nil
+				},
+			},
 		},
 	}
+}
+
+func runNotify(ctx *cli.Context, shutdown context.CancelCauseFunc) (cliapp.Lifecycle, error) {
+	log.Info("running notify task ...... ")
+	cfg, err := config.LoadConfig(ctx)
+	if err != nil {
+		log.Error("load config failed", "err", err)
+		return nil, err
+	}
+	db, err := database.NewDB(ctx.Context, cfg.MasterDB)
+	if err != nil {
+		log.Error("failed to connect to database", "err", err)
+		return nil, err
+	}
+	return notifier.NewNotifier(db, shutdown)
+}
+
+func runMigrations(ctx *cli.Context) error {
+	ctx.Context = opio.CancelOnInterrupt(ctx.Context)
+	log.Info("running migrations.....")
+	cfg, err := config.LoadConfig(ctx)
+	if err != nil {
+		log.Error("failed to load config", "err", err)
+		return err
+	}
+	db, err := database.NewDB(ctx.Context, cfg.MasterDB)
+	if err != nil {
+		log.Error("failed to connect to database", "err", err)
+		return err
+	}
+	defer func(db *database.DB) {
+		err := db.Close()
+		if err != nil {
+			log.Error("failed to close database", "err", err)
+		}
+	}(db)
+
+	return db.ExecuteSQLMigration(cfg.Migrations)
 }
 
 func runMultichainSync(ctx *cli.Context, shutdown context.CancelCauseFunc) (cliapp.Lifecycle, error) {

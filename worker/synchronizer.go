@@ -2,10 +2,10 @@ package worker
 
 import (
 	"context"
-	"github.com/ethereum/go-ethereum/common"
 	"math/big"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/pkg/errors"
 
@@ -159,17 +159,17 @@ func (syncer *BaseSynchronizer) processBatch(headers []rpcclient.BlockHeader) er
 				}
 
 				// 归集
-				if (existFromAddress && fromAddressType == database.AddressTypeEOA) && (existToAddress && toAddressType == database.AddressTypeHot) && !existToAddress {
+				if (existFromAddress && fromAddressType == database.AddressTypeEOA) && (existToAddress && toAddressType == database.AddressTypeHot) {
 					log.Info("Found collection transaction ", "txHash", tx.Hash, "from", fromAddress, "to", toAddress)
 					txItem.TxType = database.TxTypeCollection
 				}
 				// 热转冷
-				if (existFromAddress && fromAddressType == database.AddressTypeHot) && (existToAddress && toAddressType == database.AddressTypeCold) && !existToAddress {
+				if (existFromAddress && fromAddressType == database.AddressTypeHot) && (existToAddress && toAddressType == database.AddressTypeCold) {
 					log.Info("Found hot2cold transaction ", "txHash", tx.Hash, "from", fromAddress, "to", toAddress)
 					txItem.TxType = database.TxTypeHot2Cold
 				}
 				// 冷转热
-				if (existFromAddress && fromAddressType == database.AddressTypeCold) && (existToAddress && toAddressType == database.AddressTypeHot) && !existToAddress {
+				if (existFromAddress && fromAddressType == database.AddressTypeCold) && (existToAddress && toAddressType == database.AddressTypeHot) {
 					log.Info("Found cold2hot transaction ", "txHash", tx.Hash, "from", fromAddress, "to", toAddress)
 					txItem.TxType = database.TxTypeCold2Hot
 				}

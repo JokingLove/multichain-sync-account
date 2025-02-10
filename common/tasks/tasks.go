@@ -2,8 +2,9 @@ package tasks
 
 import (
 	"fmt"
-	"golang.org/x/sync/errgroup"
 	"runtime/debug"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type Group struct {
